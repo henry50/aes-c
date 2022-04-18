@@ -1,3 +1,3 @@
-aesbuild aes.c:
-	@gcc -o aes aes.c
+aesbuild:
+	@gcc -g -o aes aes.c util.c
 	@echo "Make finished"
