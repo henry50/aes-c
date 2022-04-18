@@ -163,11 +163,14 @@ uint8_t* RotWord(uint8_t* a){
 }
 
 uint8_t* Rcon(int a){
-    /* Gets the round constant array for a value a.
-       The first item is from the table, the other
-       3 are all 0 */
+    /* Calculates the round constant and returns it in an array */
+    uint8_t rcon = 0x8d;
+    int i;
+    for(i = 0; i < a; i++){
+        rcon = ((rcon << 1) ^ (0x11b & - (rcon >> 7)));
+    }
     uint8_t* word = calloc(4, sizeof(uint8_t));
-    word[0] = rcon[a-1];
+    word[0] = rcon;
     return word;
 }
 

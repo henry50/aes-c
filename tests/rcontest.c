@@ -22,10 +22,22 @@ uint8_t* xorWords(uint8_t* a, uint8_t* b){
     return word;
 }
 
+uint8_t* Rcon(int a){
+    /* rcon = (rcon<<1) ^ (0x11b & -(rcon>>7)); */
+    uint8_t rcon = 0x8d;
+    int i;
+    for(i = 0; i < a; i++){
+        rcon = ((rcon << 1) ^ (0x11b & - (rcon >> 7)));
+    }
+    uint8_t* word = malloc(4*sizeof(uint8_t));
+    word[0] = rcon;
+    return word;
+}
+
 int main(){
-    uint8_t rcon[] = {1, 0, 0, 0};
-    uint8_t word[] = {0x8a, 0x84, 0xeb, 0x01};
-    uint8_t* result = xorWords(rcon, word);
-    printWord(result);
+    int i;
+    for(i = 1; i < 20; i++){
+        printWord(Rcon(i));
+    }
     return 0;
 }
