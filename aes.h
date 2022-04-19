@@ -12,11 +12,13 @@ typedef uint8_t* Key;
 
 /* My additional methods */
 void encrypt(char* plain, char* key);
-void toState(State* state, uint8_t* input);
-void fromState(State* state, uint8_t* output);
+void decrypt(char* cipher, char* key);
+State* toState(uint8_t* input);
+uint8_t** fromState(State* state);
 
 /* AES main methods */
-uint8_t* Cipher(uint8_t* input, uint8_t* keySchedule, size_t keySize);
+uint8_t** Cipher(uint8_t* input, uint8_t* keySchedule, size_t keySize);
+uint8_t** InvCipher(uint8_t* input, uint8_t* w, size_t keySize);
 
 /* AES sub-methods */
 void SubBytes(State* state);

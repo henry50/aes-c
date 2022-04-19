@@ -7,24 +7,25 @@
 #include "util.h"
 #include "const.c"
 
-/*
-    TODO
-    Inverse cipher
-    Make command line
-*/
-
 int main(){
+    printf("ENCRYPTION:\n");
     encrypt("3243f6a8885a308d313198a2e0370734", "2b7e151628aed2a6abf7158809cf4f3c"); /* Appendix B example */
     encrypt("00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f"); /* Appendix C 128-bit example */
     encrypt("00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f1011121314151617"); /* Appendix C 192-bit example */
     encrypt("00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"); /* Appendix C 256-bit example */
+    /* Inverse of the above */
+    printf("DECRYPTION:\n");
+    decrypt("3925841d02dc09fbdc118597196a0b32", "2b7e151628aed2a6abf7158809cf4f3c");
+    decrypt("69c4e0d86a7b0430d8cdb78070b4c55a", "000102030405060708090a0b0c0d0e0f");
+    decrypt("dda97ca4864cdfe06eaf70a0ec0d7191", "000102030405060708090a0b0c0d0e0f1011121314151617");
+    decrypt("8ea2b7ca516745bfeafc49904b496089", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
     return 0;
 }
 
 void encrypt(char* plaintext, char* keyStr){
-    uint8_t *keySchedule, *output;
+    uint8_t *keySchedule, **output;
     int i;
-    /* Hardcoded input and key */
+    /* Get input and key */
     uint8_t* input = malloc(sizeof(uint8_t) * 16);
     stringToBytes(plaintext, input);
     size_t keyBytes = (sizeof(uint8_t)*strlen(keyStr))/2;
@@ -38,29 +39,71 @@ void encrypt(char* plaintext, char* keyStr){
     /* Run cipher */
     output = Cipher(input, keySchedule, keySize);
     for(i = 0; i < 16; i++){
-        printf("%02x", output[i]);
+        printf("%02x", (*output)[i]);
     }
     printf("\n");
     free(input);
     free(key);
     free(keySchedule);
+    free(*output);
     free(output);
 }
 
-void toState(State* state, uint8_t* input){
+void decrypt(char* ciphertext, char* keyStr){
+    uint8_t *keySchedule, **output;
+    int i;
+    /* Get input and key */
+    uint8_t* input = malloc(sizeof(uint8_t) * 16);
+    stringToBytes(ciphertext, input);
+    size_t keyBytes = (sizeof(uint8_t)*strlen(keyStr))/2;
+    Key key = malloc(keyBytes);
+    stringToBytes(keyStr, key);
+    size_t keySize = keyBytes * 8; /* Convert bytes to bits */
+    /* Create array for key schedule */
+    keySchedule = calloc(4 * Nb * (Nr(keySize) + 1), sizeof(uint8_t));
+    /* Expand key */
+    KeyExpansion(key, keySchedule, keySize);
+    /* Run cipher */
+    output = InvCipher(input, keySchedule, keySize);
+    for(i = 0; i < 16; i++){
+        printf("%02x", (*output)[i]);
+    }
+    printf("\n");
+    free(input);
+    free(key);
+    free(keySchedule);
+    free(*output);
+    free(output);
+}
+
+State* toState(uint8_t* input){
     int i, j;
+    /* Malloc state */
+    State* stateptr = malloc(sizeof(State));
+    *stateptr = malloc(4 * sizeof(uint8_t*));
+    State state = *stateptr;
+    for(i = 0; i < 4; i++){
+        state[i] = malloc(Nb * sizeof(uint8_t));
+    }
+    /* Fill state */
     for(i = 0; i < 4; i++){
         for(j = 0; j < Nb; j++){
             /* Set value in state array to current byte */
-            (*state)[j][i] = *input;
+            state[j][i] = *input;
             /* Increment pointer */
             input++;
         }
     }
+    return stateptr;
 }
 
-void fromState(State* state, uint8_t* output){
+uint8_t** fromState(State* state){
     int i, j;
+    /* Malloc output */
+    uint8_t** outputptr = malloc(sizeof(uint8_t*));
+    *outputptr = malloc(sizeof(uint8_t) * 16);
+    uint8_t* output = *outputptr;
+    /* Fill output */
     for(i = 0; i < 4; i++){
         for(j = 0; j < Nb; j++){
             /* Set the output to it's array item */
@@ -69,33 +112,60 @@ void fromState(State* state, uint8_t* output){
             output++;
         }
     }
+    return outputptr;
+}
+
+void freeState(State* state){
+    int i;
+    for(i = 0; i < 4; i++){
+        free((*state)[i]);
+    }
+    free(*state);
+    free(state);
 }
 
 /*
     AES sub-methods start
 */
-void SubBytes(State* state){
+void _SubBytes(State* state, const uint8_t* box){
     int i, j;
     for(i = 0; i < 4; i++){
         for(j = 0; j < Nb; j++){
             /* Get the new value from the S-box */
-            uint8_t new = sbox[(*state)[i][j]];
+            uint8_t new = box[(*state)[i][j]];
             (*state)[i][j] = new;
         }
     }
 }
 
-void ShiftRows(State* state){
+void SubBytes(State* state){
+    _SubBytes(state, sbox);
+}
+
+void InvSubBytes(State* state){
+    _SubBytes(state, isbox);
+}
+
+void _ShiftRows(State* state, int multiplier){
     int i, j;
     for(i = 0; i < 4; i++){
         /* The row number is the number of shifts to do */
         uint8_t temp[4];
         for(j = 0; j < Nb; j++){
-            temp[((j + Nb) - i) % Nb] = (*state)[i][j];
+            /* The multiplier determines whether to do a left or right shift */
+            temp[((j + Nb) + (multiplier * i)) % Nb] = (*state)[i][j];
         }
         /* Copy temp array to state array */
         memcpy((*state)[i], temp, 4);
     }
+}
+
+void ShiftRows(State* state){
+    _ShiftRows(state, -1);
+}
+
+void InvShiftRows(State* state){
+    _ShiftRows(state, 1);
 }
 
 /* Multiplies two bytes in the 2^8 Galois field */
@@ -125,6 +195,21 @@ void MixColumns(State* state){
         temp[1] = (*state)[0][c] ^ galoisMultiply((*state)[1][c], 2) ^ galoisMultiply((*state)[2][c], 3) ^ (*state)[3][c];
         temp[2] = (*state)[0][c] ^ (*state)[1][c] ^ galoisMultiply((*state)[2][c], 2) ^ galoisMultiply((*state)[3][c], 3);
         temp[3] = galoisMultiply((*state)[0][c], 3) ^ (*state)[1][c] ^ (*state)[2][c] ^ galoisMultiply((*state)[3][c], 2);
+        /* Copy temp array to state */
+        for(r = 0; r < 4; r++){
+            (*state)[r][c] = temp[r];
+        }
+    }
+}
+
+void InvMixColumns(State* state){
+    int c, r;
+    for(c = 0; c < Nb; c++){
+        uint8_t temp[4];
+        temp[0] = galoisMultiply((*state)[0][c], 14) ^ galoisMultiply((*state)[1][c], 11) ^ galoisMultiply((*state)[2][c], 13) ^ galoisMultiply((*state)[3][c], 9);
+        temp[1] = galoisMultiply((*state)[0][c], 9)  ^ galoisMultiply((*state)[1][c], 14) ^ galoisMultiply((*state)[2][c], 11) ^ galoisMultiply((*state)[3][c], 13);
+        temp[2] = galoisMultiply((*state)[0][c], 13) ^ galoisMultiply((*state)[1][c], 9)  ^ galoisMultiply((*state)[2][c], 14) ^ galoisMultiply((*state)[3][c], 11);
+        temp[3] = galoisMultiply((*state)[0][c], 11) ^ galoisMultiply((*state)[1][c], 13) ^ galoisMultiply((*state)[2][c], 9)  ^ galoisMultiply((*state)[3][c], 14);
         /* Copy temp array to state */
         for(r = 0; r < 4; r++){
             (*state)[r][c] = temp[r];
@@ -241,30 +326,48 @@ void KeyExpansion(uint8_t* key, uint8_t* w, size_t keySize){
     Turns it into a state
     Applies the cipher as described in Figure 5 of the standard
 */
-uint8_t* Cipher(uint8_t* input, uint8_t* w, size_t keySize){
+uint8_t** Cipher(uint8_t* input, uint8_t* w, size_t keySize){
     int i;
-    uint8_t* output;
-    State* state_ptr;
-    /* Convert input to state */
-    State state = malloc(4 * sizeof(uint8_t*));
-    for(i = 0; i < 4; i++){
-        state[i] = malloc(Nb * sizeof(uint8_t));
-    }
-    state_ptr = &state;
-    toState(state_ptr, input);
+    uint8_t** output;
+    State* state = toState(input);
     /* Cipher method */
-    AddRoundKey(state_ptr, getWord(w, 0));
+    AddRoundKey(state, getWord(w, 0));
     for(i = 1; i < Nr(keySize); i++){
-        SubBytes(state_ptr);
-        ShiftRows(state_ptr);
-        MixColumns(state_ptr);
-        AddRoundKey(state_ptr, getWord(w, i*Nb));
+        SubBytes(state);
+        ShiftRows(state);
+        MixColumns(state);
+        AddRoundKey(state, getWord(w, i*Nb));
     }
-    SubBytes(state_ptr);
-    ShiftRows(state_ptr);
-    AddRoundKey(state_ptr, getWord(w, Nr(keySize)*Nb));
+    SubBytes(state);
+    ShiftRows(state);
+    AddRoundKey(state, getWord(w, Nr(keySize)*Nb));
     /* Allocate output and put the state in it */
-    output = malloc(sizeof(uint8_t) * 16);
-    fromState(state_ptr, output);
+    output = fromState(state);
+    freeState(state);
+    return output;
+}
+
+/*
+    Follows the inverse cipher alogrithm in figure 12 of the standard
+*/
+uint8_t** InvCipher(uint8_t* input, uint8_t* w, size_t keySize){
+    int i;
+    uint8_t** output;
+    State* state = toState(input);
+
+    /* Inverse cipher method */
+    AddRoundKey(state, getWord(w, Nr(keySize) * Nb));
+    for(i = Nr(keySize) - 1; i >= 1; i--){
+        InvShiftRows(state);
+        InvSubBytes(state);
+        AddRoundKey(state, getWord(w, i*Nb));
+        InvMixColumns(state);
+    }
+    InvShiftRows(state);
+    InvSubBytes(state);
+    AddRoundKey(state, getWord(w, 0));
+
+    output = fromState(state);
+    freeState(state);
     return output;
 }
