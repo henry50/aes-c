@@ -1,3 +1,6 @@
+/*
+    Utitlies for printing various parts of the program for debugging.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -13,18 +16,6 @@ void printState(State* state){
             printf("| %02x ", (*state)[i][j]);
         }
         printf("|\n");
-    }
-}
-
-void stringToBytes(char* str, uint8_t* bytes){
-    /* Converts a hexadecimal string of bytes into an
-       array of uint8_t */
-    int i;
-    for(i = 0; i < strlen(str) - 1; i += 2){
-        char* pair = malloc(2 * sizeof(char));
-        memcpy(pair, &str[i], 2);
-        bytes[i/2] = strtol(pair, NULL, 16);
-        free(pair);
     }
 }
 
